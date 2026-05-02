@@ -110,7 +110,7 @@ def available_sources(config: dict[str, Any], requested_sources: list[str] | Non
         available.append("bluesky")
     if env.is_truthsocial_available(config):
         available.append("truthsocial")
-    if config.get("BRAVE_API_KEY") or config.get("EXA_API_KEY") or config.get("SERPER_API_KEY") or config.get("PARALLEL_API_KEY"):
+    if config.get("BRAVE_API_KEY") or config.get("EXA_API_KEY") or config.get("SERPER_API_KEY") or config.get("PARALLEL_API_KEY") or config.get("SEARXNG_URL") or config.get("SEARXNG_INSTANCE_URL"):
         available.append("grounding")
     # Perplexity Sonar: opt-in additive source via INCLUDE_SOURCES=perplexity
     include_sources = (config.get("INCLUDE_SOURCES") or "").lower().split(",")
@@ -140,6 +140,8 @@ def diagnose(config: dict[str, Any], requested_sources: list[str] | None = None)
         native_web_backend = "serper"
     elif config.get("PARALLEL_API_KEY"):
         native_web_backend = "parallel"
+    elif config.get("SEARXNG_URL") or config.get("SEARXNG_INSTANCE_URL"):
+        native_web_backend = "searxng"
     providers_status = {
         "google": bool(google_key),
         "openai": bool(config.get("OPENAI_API_KEY")) and config.get("OPENAI_AUTH_STATUS") == env.AUTH_STATUS_OK,

@@ -62,6 +62,14 @@ def normalize_source_items(
     filtered = filter_by_date_range(normalized, from_date, to_date, require_date=require_date)
     if filtered:
         return filtered
+    if source == "grounding":
+        # SearxNG and similar web backends often omit publish dates entirely.
+        # Dropping every undated result makes web search look broken even when
+        # the backend returned relevant pages. Keep undated web results as a
+        # fallback, but only when nothing in-range survived the date filter.
+        undated = [item for item in normalized if not item.published_at]
+        if undated:
+            return undated
     if freshness_mode == "evergreen_ok" and source == "youtube":
         if require_date:
             return [item for item in normalized if item.published_at]

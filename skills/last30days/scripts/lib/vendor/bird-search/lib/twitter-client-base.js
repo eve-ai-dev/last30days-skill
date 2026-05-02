@@ -2,6 +2,28 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { runtimeQueryIds } from './runtime-query-ids.js';
 import { QUERY_IDS, TARGET_QUERY_ID_OPERATIONS } from './twitter-client-constants.js';
 import { normalizeQuoteDepth } from './twitter-client-utils.js';
+
+let _proxyDispatcherPromise = null;
+async function getProxyDispatcher() {
+    if (_proxyDispatcherPromise) {
+        return _proxyDispatcherPromise;
+    }
+    _proxyDispatcherPromise = (async () => {
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+        if (!proxyUrl) {
+            return null;
+        }
+        try {
+            const undiciModulePath = process.env.LAST30DAYS_UNDICI_PATH || 'undici';
+            const undici = await import(undiciModulePath);
+            return new undici.ProxyAgent(proxyUrl);
+        }
+        catch {
+            return null;
+        }
+    })();
+    return _proxyDispatcherPromise;
+}
 export class TwitterClientBase {
     authToken;
     ct0;
@@ -63,13 +85,15 @@ export class TwitterClientBase {
         return Array.from(new Set([primary, 'M1jEez78PEfVfbQLvlWMvQ', '5h0kNbk3ii97rmfY6CdgAA', 'Tp1sewRU1AsZpBWhqCZicQ']));
     }
     async fetchWithTimeout(url, init) {
+        const dispatcher = await getProxyDispatcher();
+        const fetchInit = dispatcher ? { ...init, dispatcher } : init;
         if (!this.timeoutMs || this.timeoutMs <= 0) {
-            return fetch(url, init);
+            return fetch(url, fetchInit);
         }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
         try {
-            return await fetch(url, { ...init, signal: controller.signal });
+            return await fetch(url, { ...fetchInit, signal: controller.signal });
         }
         finally {
             clearTimeout(timeoutId);

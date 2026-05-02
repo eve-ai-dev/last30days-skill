@@ -96,6 +96,47 @@ def exa_search(
 # Serper (Google Search wrapper)
 # ---------------------------------------------------------------------------
 
+def searxng_search(
+    query: str, date_range: tuple[str, str], base_url: str, count: int = 5,
+) -> tuple[list[dict], dict]:
+    base = (base_url or "").rstrip("/")
+    if not base:
+        raise RuntimeError("SEARXNG_URL is required when web_backend='searxng'")
+    url = (
+        f"{base}/search?"
+        + urllib.parse.urlencode({"q": query, "format": "json"})
+    )
+    data = http.request("GET", url, timeout=15)
+    items = []
+    for i, r in enumerate((data.get("results", []))[: max(count * 3, count)]):
+        if not isinstance(r, dict):
+            continue
+        raw_url = r.get("url", "")
+        if not raw_url:
+            continue
+        raw_date = r.get("publishedDate") or r.get("published_date") or r.get("date") or ""
+        pub_date = None
+        if isinstance(raw_date, str) and raw_date:
+            cand = raw_date.split("T")[0] if "T" in raw_date else raw_date[:10]
+            pub_date = _normalize_date(cand) or _parse_serper_date(raw_date)
+        if pub_date and not _in_date_range(pub_date, date_range):
+            continue
+        items.append({
+            "id": f"WX{i + 1}",
+            "title": r.get("title", ""),
+            "url": raw_url,
+            "source_domain": _domain(raw_url),
+            "snippet": r.get("content", "") or r.get("snippet", ""),
+            "date": pub_date,
+            "relevance": 0.75,
+            "why_relevant": "SearxNG web search",
+        })
+        if len(items) >= count:
+            break
+    artifact = {"label": "searxng", "webSearchQueries": [query], "resultCount": len(items)}
+    return items, artifact
+
+
 def serper_search(
     query: str, date_range: tuple[str, str], api_key: str, count: int = 5,
 ) -> tuple[list[dict], dict]:
@@ -203,6 +244,8 @@ def web_search(
             backend = "serper"
         elif config.get("PARALLEL_API_KEY"):
             backend = "parallel"
+        elif config.get("SEARXNG_URL") or config.get("SEARXNG_INSTANCE_URL"):
+            backend = "searxng"
         else:
             return [], {}
     if backend == "brave":
@@ -220,6 +263,11 @@ def web_search(
         if not key:
             raise RuntimeError("SERPER_API_KEY is required when web_backend='serper'")
         return serper_search(query, date_range, key)
+    if backend == "searxng":
+        base_url = config.get("SEARXNG_URL") or config.get("SEARXNG_INSTANCE_URL")
+        if not base_url:
+            raise RuntimeError("SEARXNG_URL is required when web_backend='searxng'")
+        return searxng_search(query, date_range, base_url)
     if backend == "parallel":
         key = config.get("PARALLEL_API_KEY")
         if not key:

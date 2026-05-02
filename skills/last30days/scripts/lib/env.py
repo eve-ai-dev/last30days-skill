@@ -213,7 +213,8 @@ def get_config() -> dict[str, Any]:
     Priority (highest wins):
       1. Environment variables (os.environ)
       2. .claude/last30days.env (per-project config)
-      3. ~/.config/last30days/.env (global config)
+      3. LAST30DAYS_CONFIG_DIR/.env when the override is set
+      4. ~/.config/last30days/.env (global fallback)
     """
     # Load from global config file
     file_env = load_env_file(CONFIG_FILE) if CONFIG_FILE else {}
@@ -259,6 +260,8 @@ def get_config() -> dict[str, Any]:
         ('BRAVE_API_KEY', None),
         ('EXA_API_KEY', None),
         ('SERPER_API_KEY', None),
+        ('SEARXNG_URL', None),
+        ('SEARXNG_INSTANCE_URL', None),
         ('OPENROUTER_API_KEY', None),
         ('PARALLEL_API_KEY', None),
         ('XQUIK_API_KEY', None),

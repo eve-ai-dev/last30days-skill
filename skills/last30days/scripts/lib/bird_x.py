@@ -64,6 +64,10 @@ def _subprocess_env() -> Dict[str, str]:
     # Hard-disable browser-cookie fallback so normal pipeline runs never hit
     # Safari/Chrome Keychain prompts during source detection or search.
     env["BIRD_DISABLE_BROWSER_COOKIES"] = "1"
+    # Node's built-in fetch/undici does not honor HTTP(S)_PROXY automatically
+    # in this runtime. Pass a resolvable undici module path so vendored bird-search
+    # can create an explicit ProxyAgent and stop trying direct socket connects.
+    env.setdefault("LAST30DAYS_UNDICI_PATH", "/usr/share/nodejs/undici/index.js")
     return env
 
 

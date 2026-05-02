@@ -375,7 +375,8 @@ def _fetch_transcript_direct(video_id: str, timeout: int = 30) -> Optional[str]:
         _log(f"Direct transcript: no caption tracks for {video_id}")
         return None
 
-    # Find English track (prefer exact 'en', then any en variant, then first track)
+    # Prefer English when available, but do not reject other caption languages.
+    # YouTube often exposes only non-English captions for otherwise valid videos.
     base_url = None
     for track in caption_tracks:
         lang = track.get("languageCode", "")
@@ -389,10 +390,12 @@ def _fetch_transcript_direct(video_id: str, timeout: int = 30) -> Optional[str]:
                 base_url = track.get("baseUrl")
                 break
     if not base_url:
-        # Fall back to first available track
-        base_url = caption_tracks[0].get("baseUrl")
+        for track in caption_tracks:
+            base_url = track.get("baseUrl")
+            if base_url:
+                break
     if not base_url:
-        _log(f"Direct transcript: no baseUrl in caption tracks for {video_id}")
+        _log(f"Direct transcript: no usable caption track URL for {video_id}")
         return None
 
     # Step 3: Fetch the VTT subtitle file
