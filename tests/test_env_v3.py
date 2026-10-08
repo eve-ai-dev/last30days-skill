@@ -29,6 +29,41 @@ class EnvV3Tests(unittest.TestCase):
         self.assertEqual("a", bird_x._credentials["AUTH_TOKEN"])
         self.assertEqual("b", bird_x._credentials["CT0"])
 
+    def test_camofox_x_cookies_override_stale_env_cookies_in_memory(self):
+        config = {"AUTH_TOKEN": "stale-auth", "CT0": "stale-ct0", "CAMOFOX_ACCESS_KEY": "key", "CAMOFOX_USER_ID": "u"}
+        storage = {
+            "cookies": [
+                {"name": "auth_token", "domain": ".x.com", "value": "fresh-auth"},
+                {"name": "ct0", "domain": ".x.com", "value": "fresh-ct0"},
+            ]
+        }
+        with mock.patch("lib.env._fetch_camofox_storage_state", return_value=storage):
+            extracted = env.extract_camofox_x_credentials(config)
+        self.assertEqual({"AUTH_TOKEN": "fresh-auth", "CT0": "fresh-ct0"}, extracted)
+
+    def test_get_config_prefers_camofox_x_cookies_over_env(self):
+        storage = {
+            "cookies": [
+                {"name": "auth_token", "domain": ".x.com", "value": "fresh-auth"},
+                {"name": "ct0", "domain": ".x.com", "value": "fresh-ct0"},
+            ]
+        }
+        with mock.patch("lib.env._find_project_env", return_value=None), \
+             mock.patch("lib.env.load_env_file", return_value={}), \
+             mock.patch("lib.env.extract_browser_credentials", return_value={}), \
+             mock.patch("lib.env._fetch_camofox_storage_state", return_value=storage), \
+             mock.patch.dict(os.environ, {
+                 "AUTH_TOKEN": "stale-auth",
+                 "CT0": "stale-ct0",
+                 "CAMOFOX_ACCESS_KEY": "key",
+                 "CAMOFOX_USER_ID": "u",
+             }, clear=True):
+            config = env.get_config()
+        self.assertEqual("fresh-auth", config["AUTH_TOKEN"])
+        self.assertEqual("fresh-ct0", config["CT0"])
+        self.assertEqual("camofox", config["_AUTH_TOKEN_SOURCE"])
+        self.assertEqual("camofox", config["_CT0_SOURCE"])
+
     def test_bird_auth_never_checks_browser_cookies(self):
         # The guarantee: is_bird_authenticated() must not spawn any child
         # process to probe for cookies. All subprocess paths in bird_x go

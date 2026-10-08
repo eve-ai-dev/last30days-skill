@@ -13,6 +13,7 @@ from typing import Any
 from . import (
     bird_x,
     bluesky,
+    browser_fallback,
     dates,
     dedupe,
     entity_extract,
@@ -885,19 +886,35 @@ def _retrieve_stream(
                     token=config.get("SCRAPECREATORS_API_KEY"),
                     subreddits=subreddits,
                 )
-                return reddit.parse_reddit_response(result), {}
+                parsed = reddit.parse_reddit_response(result)
+                if parsed:
+                    return parsed, {}
             except Exception as exc:
                 sys.stderr.write(
                     f"[Reddit] ScrapeCreators backup also failed "
                     f"({type(exc).__name__}: {exc})\n"
                 )
+        if browser_fallback.available(config):
+            browser_results = browser_fallback.search_reddit(
+                reddit_query,
+                from_date,
+                to_date,
+                depth=depth,
+                subreddits=subreddits,
+                config=config,
+            )
+            if browser_results:
+                return browser_results, {}
         return [], {}
     if source == "x":
         backend = runtime.x_search_backend or env.get_x_source(config)
+        items: list[dict] = []
         if backend == "bird":
             result = bird_x.search_x(subquery.search_query, from_date, to_date, depth=depth)
-            return bird_x.parse_bird_response(result, query=subquery.search_query), {}
-        if backend == "xai":
+            items = bird_x.parse_bird_response(result, query=subquery.search_query)
+            if items:
+                return items, {}
+        elif backend == "xai":
             model = config.get("LAST30DAYS_X_MODEL") or config.get("XAI_MODEL_PIN") or providers.XAI_DEFAULT
             result = xai_x.search_x(
                 config["XAI_API_KEY"],
@@ -907,11 +924,27 @@ def _retrieve_stream(
                 to_date,
                 depth=depth,
             )
-            return xai_x.parse_x_response(result), {}
-        if backend == "xurl":
+            items = xai_x.parse_x_response(result)
+            if items:
+                return items, {}
+        elif backend == "xurl":
             result = xurl_x.search_x(subquery.search_query, depth=depth)
-            return xurl_x.parse_x_response(result, topic=subquery.search_query), {}
-        raise RuntimeError("No X backend is available.")
+            items = xurl_x.parse_x_response(result, topic=subquery.search_query)
+            if items:
+                return items, {}
+        elif not browser_fallback.available(config):
+            raise RuntimeError("No X backend is available.")
+        if browser_fallback.available(config):
+            browser_items = browser_fallback.search_x(
+                subquery.search_query,
+                from_date,
+                to_date,
+                depth=depth,
+                config=config,
+            )
+            if browser_items:
+                return browser_items, {}
+        return [], {}
     if source == "youtube":
         # Use raw_topic so expand_youtube_queries() generates diverse variants
         # from the original user topic, not the planner's narrowed search_query.

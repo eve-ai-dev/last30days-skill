@@ -266,6 +266,10 @@ def get_config() -> dict[str, Any]:
         ('PARALLEL_API_KEY', None),
         ('XQUIK_API_KEY', None),
         ('FROM_BROWSER', None),
+        ('CAMOFOX_BASE_URL', None),
+        ('CAMOFOX_ACCESS_KEY', None),
+        ('CAMOFOX_USER_ID', None),
+        ('CAMOFOX_SESSION_KEY', None),
         ('SETUP_COMPLETE', None),
         ('INCLUDE_SOURCES', ''),
     ]
@@ -281,14 +285,70 @@ def get_config() -> dict[str, Any]:
     else:
         config['_CONFIG_SOURCE'] = 'env_only'
 
-    # Extract browser credentials if configured
+    # Extract local browser credentials for services that support filesystem cookie reads.
     browser_creds = extract_browser_credentials(config)
     for key, value in browser_creds.items():
         if not config.get(key):
             config[key] = value
             config[f"_{key}_SOURCE"] = "browser"
 
+    # Prefer the live Camofox browser session for X cookies. This intentionally
+    # overrides stale AUTH_TOKEN/CT0 values from .env or process env in-memory
+    # only; it never writes secrets back to disk.
+    camofox_x_creds = extract_camofox_x_credentials(config)
+    for key, value in camofox_x_creds.items():
+        config[key] = value
+        config[f"_{key}_SOURCE"] = "camofox"
+
     return config
+
+
+# ---------------------------------------------------------------------------
+# Camofox live browser cookie extraction
+# ---------------------------------------------------------------------------
+
+
+def _fetch_camofox_storage_state(config: dict[str, Any]) -> dict[str, Any]:
+    """Fetch Camofox storage_state JSON without logging secrets."""
+    import urllib.parse
+    import urllib.request
+
+    token = config.get("CAMOFOX_ACCESS_KEY") or os.environ.get("CAMOFOX_ACCESS_KEY")
+    user_id = config.get("CAMOFOX_USER_ID") or os.environ.get("CAMOFOX_USER_ID")
+    if not token or not user_id:
+        return {}
+    base_url = (config.get("CAMOFOX_BASE_URL") or os.environ.get("CAMOFOX_BASE_URL") or "http://camofox:9377").rstrip("/")
+    url = f"{base_url}/sessions/{urllib.parse.quote(str(user_id))}/storage_state"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def extract_camofox_x_credentials(config: dict[str, Any]) -> dict[str, str]:
+    """Extract AUTH_TOKEN/CT0 from the live Camofox X session when available."""
+    try:
+        storage = _fetch_camofox_storage_state(config)
+    except Exception:
+        return {}
+    cookies = storage.get("cookies") or []
+    found: dict[str, str] = {}
+    for cookie in cookies:
+        if not isinstance(cookie, dict):
+            continue
+        domain = str(cookie.get("domain") or "")
+        if "x.com" not in domain and "twitter.com" not in domain:
+            continue
+        name = cookie.get("name")
+        value = cookie.get("value")
+        if not value:
+            continue
+        if name == "auth_token":
+            found["AUTH_TOKEN"] = str(value)
+        elif name == "ct0":
+            found["CT0"] = str(value)
+    if found.get("AUTH_TOKEN") and found.get("CT0"):
+        return {"AUTH_TOKEN": found["AUTH_TOKEN"], "CT0": found["CT0"]}
+    return {}
 
 
 # ---------------------------------------------------------------------------

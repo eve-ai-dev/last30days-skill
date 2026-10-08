@@ -31,7 +31,8 @@ class FooterNudgeSuppressionTests(unittest.TestCase):
         # Strip any grounded-web keys the host might have so the promo path
         # triggers deterministically in mock + no-backend.
         for key in ("BRAVE_API_KEY", "EXA_API_KEY", "SERPER_API_KEY",
-                    "PARALLEL_API_KEY", "OPENROUTER_API_KEY"):
+                    "PARALLEL_API_KEY", "OPENROUTER_API_KEY",
+                    "SEARXNG_URL", "SEARXNG_INSTANCE_URL"):
             env.pop(key, None)
         return subprocess.run(cmd, capture_output=True, text=True, env=env)
 

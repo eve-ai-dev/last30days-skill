@@ -335,20 +335,24 @@ def poll_device_auth(
     """
     import sys
 
-    deadline = time.time() + timeout
-    last_reminder = time.time()
+    start_time = time.time()
+    deadline = start_time + timeout
+    last_reminder = start_time
     reminder_count = 0
     max_reminders = 4
     reminder_interval = 30  # seconds between reminders
 
-    while time.time() < deadline:
+    while True:
+        now = time.time()
+        if now >= deadline:
+            break
         time.sleep(interval)
 
         # Periodic reminder of the code while waiting
         if (
             user_code
             and reminder_count < max_reminders
-            and time.time() - last_reminder >= reminder_interval
+            and now - last_reminder >= reminder_interval
         ):
             clipboard_hint = " (on your clipboard)" if clipboard_ok else ""
             print(
@@ -356,7 +360,7 @@ def poll_device_auth(
                 file=sys.stderr,
                 flush=True,
             )
-            last_reminder = time.time()
+            last_reminder = now
             reminder_count += 1
 
         try:

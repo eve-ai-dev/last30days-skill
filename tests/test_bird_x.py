@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "skills" / "last30days" / "scripts"))
 
-from lib.bird_x import parse_bird_response
+from lib.bird_x import _subprocess_env, parse_bird_response
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +17,11 @@ VENDORED_BIRD = REPO_ROOT / "skills" / "last30days" / "scripts" / "lib" / "vendo
 
 
 class TestBirdXEngagementZero(unittest.TestCase):
+    def test_node_subprocess_uses_native_env_proxy_flag_when_available(self):
+        env = _subprocess_env()
+        self.assertIn("--use-env-proxy", env.get("NODE_OPTIONS", ""))
+        self.assertNotIn("LAST30DAYS_UNDICI_PATH", env)
+
     def test_zero_likes_preserved(self):
         tweets = [
             {

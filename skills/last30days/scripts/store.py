@@ -638,6 +638,20 @@ def get_trending(days: int = 7) -> List[Dict[str, Any]]:
         conn.close()
 
 
+def finding_from_item(item: schema.SourceItem) -> Dict[str, Any]:
+    """Convert a normalized source item into a persisted finding."""
+    return {
+        "source": item.source or "unknown",
+        "source_url": item.url,
+        "source_title": item.title,
+        "author": item.author or "",
+        "content": item.body or "",
+        "summary": item.snippet or (item.body[:500] if item.body else ""),
+        "engagement_score": item.engagement_score or 0.0,
+        "relevance_score": item.local_relevance or 0.5,
+    }
+
+
 def finding_from_candidate(candidate: schema.Candidate) -> Dict[str, Any]:
     """Convert a ranked candidate into a persisted finding."""
     primary_item = schema.candidate_primary_item(candidate)
@@ -687,23 +701,14 @@ def findings_from_report(
         findings.append(finding)
         seen_urls.add(candidate.url)
     
-    # Phase 2: Add HN/PM items not already captured in ranked candidates
-    for source_name in ["hackernews", "polymarket"]:
-        if source_name not in report.items_by_source:
-            continue
-        for item in report.items_by_source[source_name]:
-            if item.url in seen_urls:
+    # Phase 2: Add raw source items not already captured in ranked candidates.
+    # Watchlist persistence must not depend on reranking/clustering: a source can
+    # return useful evidence even when ranked_candidates is empty.
+    for source_items in report.items_by_source.values():
+        for item in source_items:
+            if not item.url or item.url in seen_urls:
                 continue  # Already captured with rich data
-            findings.append({
-                "source": source_name,
-                "source_url": item.url,
-                "source_title": item.title,
-                "author": item.author or "",
-                "content": item.body or "",
-                "summary": item.snippet or (item.body[:500] if item.body else ""),
-                "engagement_score": item.engagement_score or 0.0,
-                "relevance_score": item.local_relevance or 0.5,
-            })
+            findings.append(finding_from_item(item))
             seen_urls.add(item.url)
     
     # Apply global limit after collecting all findings (fix: was per-source, now global)

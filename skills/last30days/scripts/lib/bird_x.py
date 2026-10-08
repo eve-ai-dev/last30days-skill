@@ -64,10 +64,14 @@ def _subprocess_env() -> Dict[str, str]:
     # Hard-disable browser-cookie fallback so normal pipeline runs never hit
     # Safari/Chrome Keychain prompts during source detection or search.
     env["BIRD_DISABLE_BROWSER_COOKIES"] = "1"
-    # Node's built-in fetch/undici does not honor HTTP(S)_PROXY automatically
-    # in this runtime. Pass a resolvable undici module path so vendored bird-search
-    # can create an explicit ProxyAgent and stop trying direct socket connects.
-    env.setdefault("LAST30DAYS_UNDICI_PATH", "/usr/share/nodejs/undici/index.js")
+    # Node 22 supports proxy env vars behind --use-env-proxy. The previous
+    # LAST30DAYS_UNDICI_PATH default pointed at /usr/share/nodejs/undici/index.js,
+    # which does not exist in this runtime; Bird silently swallowed the import
+    # failure and then fetch tried direct sockets, surfacing only as "fetch failed".
+    node_options = env.get("NODE_OPTIONS", "")
+    if "--use-env-proxy" not in node_options.split():
+        env["NODE_OPTIONS"] = f"{node_options} --use-env-proxy".strip()
+    env.pop("LAST30DAYS_UNDICI_PATH", None)
     return env
 
 
